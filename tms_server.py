@@ -1,7 +1,7 @@
 from flask import Flask, Response, request
 import logging
 import math
-from pyproj import Proj, transform
+from pyproj import Transformer
 import requests
 
 
@@ -43,10 +43,9 @@ def get_image(ul_lat, ul_lon, br_lat, br_lon):
     # National Map request seemed to ask for EPSG:102100, which is apparently
     # deprecated, but similar to 3857. So we use 4326 as a good degrees based
     # SRS to convert degrees to meters in 3857
-    inProj = Proj(init='epsg:4326')
-    outProj = Proj(init='epsg:3857')
-    ul_x, ul_y= transform(inProj,outProj,ul_lon,ul_lat)
-    br_x, br_y= transform(inProj,outProj,br_lon,br_lat)
+    transformer = Transformer.from_crs("epsg:4326", "epsg:3857")
+    ul_x, ul_y = transformer.transform(ul_lon,ul_lat)
+    br_x, br_y = transformer.transform(br_lon,br_lat)
     params = {
             'f': 'image',
             'bandIds': '',
