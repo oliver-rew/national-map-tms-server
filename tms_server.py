@@ -1,12 +1,23 @@
-from flask import Flask, Response, request
+import json
 import logging
 import math
-from pyproj import Transformer, Proj, transform
+import os
+import psutil
+from functools import lru_cache
+
+import humanize
 import requests
+from flask import Flask, Response, request
+from pyproj import Transformer
 
 app = Flask(__name__)
 
 logging.basicConfig(level=logging.INFO)
+
+
+# TODO
+# - rate limiter
+# - https
 
 
 @app.route('/', defaults={'path': ''})
@@ -27,30 +38,53 @@ def tile_to_lat_lon(zoom, xtile, ytile):
     return lat_deg, lon_deg
 
 
+@app.route("/info")
+def info():
+    pid = os.getpid()
+    process = psutil.Process()
+    process.cpu_percent()
+    mem_info = process.memory_info()._asdict()
+    # make readable
+    mem_info['rss'] = humanize.naturalsize(mem_info['rss'])
+    data = {
+        "cpu_usage": process.cpu_percent(interval=0.1),
+        "mem_info": mem_info,
+        "cache": get_tile.cache_info()._asdict(),
+    }
+    return Response(json.dumps(data), status=200)
+
+
 @app.route("/<zoom>/<xtile>/<ytile>.png")
 def tilemap(zoom, xtile, ytile):
     zoom, xtile, ytile = int(zoom), int(xtile), int(ytile)
 
-    tile = get_tile(zoom, xtile, ytile)
-    headers = {
-        "content-type": "image/jpeg"
-    }
-    return Response(tile, status=200, headers=headers)
+    try:
+        tile = get_tile(zoom, xtile, ytile)
+        headers = {"content-type": "image/jpeg"}
+        return Response(tile, status=200, headers=headers)
+    except Exception as e:
+        return Response(repr(e), status=404)
 
 
-cache = {}
+# based on testing, average tile size was 6KB
+avg_tile_size = 6000
+
+# max ram is 512MB
+max_ram = 1 << 29
+
+# max cache size based on max ram and average item size
+cache_size = int(max_ram / avg_tile_size)
 
 
+@lru_cache(maxsize=cache_size)
 def get_tile(zoom, xtile, ytile):
-    if cache.get((zoom, xtile, ytile,)):
-        logging.info(f"cache hit {zoom}/{xtile}/{ytile}")
-        return cache.get((zoom, xtile, ytile,))
+    global items, total_size, lock
 
-    logging.info(f"cache miss {zoom}/{xtile}/{ytile}")
     ul_lat, ul_lon = tile_to_lat_lon(zoom, xtile, ytile)
     br_lat, br_lon = tile_to_lat_lon(zoom, xtile + 1, ytile + 1)
     img = get_image(ul_lat, ul_lon, br_lat, br_lon)
-    cache[(zoom, xtile, ytile,)] = img
+    logging.info(f"cache miss {zoom}/{xtile}/{ytile}; size: {len(img)}")
+
     return img
 
 
@@ -79,4 +113,4 @@ def get_image(ul_lat, ul_lon, br_lat, br_lon):
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=53214, debug=True)
+    app.run(host='0.0.0.0', port=53214, debug=True, )
