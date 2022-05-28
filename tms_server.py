@@ -20,6 +20,8 @@ logging.basicConfig(level=logging.INFO)
 # - rate limiter
 # - https
 # - s3
+# - flag to enable debug
+# - flag to set port (or env var?)
 
 
 @app.route('/', defaults={'path': ''})
@@ -38,6 +40,11 @@ def tile_to_lat_lon(zoom, xtile, ytile):
     lat_rad = math.atan(math.sinh(math.pi * (1 - 2 * int(ytile) / n)))
     lat_deg = math.degrees(lat_rad)
     return lat_deg, lon_deg
+
+
+@app.route("/health")
+def health():
+    return Response(status=200)
 
 
 @app.route("/info")
@@ -72,8 +79,8 @@ def tilemap(type, map, zoom, xtile, ytile):
         return Response(repr(e), status=e.code)
 
 
-# based on testing, average tile size was 6KB
-avg_tile_size = 6000
+# based on testing, average tile size was 8KB
+avg_tile_size = 1 << 13
 
 # max ram is 512MB
 max_ram = 1 << 29
