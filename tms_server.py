@@ -18,7 +18,6 @@ logging.basicConfig(level=logging.INFO)
 
 # TODO
 # - rate limiter
-# - https
 # - s3
 # - flag to enable debug
 # - flag to set port (or env var?)
